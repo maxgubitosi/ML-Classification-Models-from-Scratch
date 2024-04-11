@@ -1,39 +1,47 @@
 import numpy as np
+from collections import Counter
+import matplotlib.pyplot as plt
 
-# class LDA:
-#     def __init__(self, n_components=None):
-#         self.n_components = n_components
-#         self.scalings = None
-        
-#     def fit(self, X, y):
-#         # Separar las características por clases
-#         X0 = X[y == 0]
-#         X1 = X[y == 1]
-        
-#         # Calcular las medias de cada clase
-#         mean0 = np.mean(X0, axis=0)
-#         mean1 = np.mean(X1, axis=0)
-        
-#         # Calcular la matriz de dispersión dentro de las clases
-#         Sw = np.cov(X0.T) + np.cov(X1.T)
-        
-#         # Calcular la diferencia entre las medias de las clases
-#         mean_diff = (mean1 - mean0).values
-        
-#         # Calcular los autovectores y autovalores de (Sw^-1)(mean_diff)
-#         eigenvalues, eigenvectors = np.linalg.eig(np.linalg.inv(Sw) @ mean_diff.reshape(-1, 1))
-        
-#         # Ordenar los autovalores de mayor a menor
-#         sorted_indices = np.argsort(eigenvalues.real)[::-1]
-        
-#         # Tomar los autovectores correspondientes a los n_components autovalores más grandes
-#         if self.n_components is not None:
-#             self.scalings = eigenvectors[:, sorted_indices[:self.n_components]]
-#         else:
-#             self.scalings = eigenvectors[:, sorted_indices]
+# general functions
 
-#     def transform(self, X):
-#         return X @ self.scalings
+def euclidean_distance(x1, x2):
+    return np.sqrt(np.sum((x1 - x2)**2))
+
+
+
+# performance metrics
+
+def confusion_matrix(y_true, y_pred):
+    TP = np.sum((y_true == 1) & (y_pred == 1))
+    TN = np.sum((y_true == 0) & (y_pred == 0))
+    FP = np.sum((y_true == 0) & (y_pred == 1))
+    FN = np.sum((y_true == 1) & (y_pred == 0))
+    return TP, TN, FP, FN
+    
+def accuracy(y_true, y_pred):
+    return np.sum(y_true == y_pred) / len(y_true)
+
+def precision(y_true, y_pred):
+    TP = np.sum((y_true == 1) & (y_pred == 1))
+    FP = np.sum((y_true == 0) & (y_pred == 1))
+    return TP / (TP + FP)
+
+def recall(y_true, y_pred):
+    TP = np.sum((y_true == 1) & (y_pred == 1))
+    FN = np.sum((y_true == 1) & (y_pred == 0))
+    return TP / (TP + FN)
+
+def f1(y_true, y_pred):
+    p = precision(y_true, y_pred)
+    r = recall(y_true, y_pred)
+    return 2 * p * r / (p + r)
+
+def roc(y_true, y_pred):
+    TP, TN, FP, FN = confusion_matrix(y_true, y_pred)
+    TPR = TP / (TP + FN)
+    FPR = FP / (FP + TN)
+    return TPR, FPR
+
 
 class LDA:
 
@@ -44,7 +52,7 @@ class LDA:
 
     def fit(self, X, y):
         n_features = X.shape[1]
-        class_labels = np.unique(y) # en nuestro caso son solo 2
+        class_labels = np.unique(y) 
 
         # Within class scatter matrix:
         # SW = sum((X_c - mean_X_c)^2 )
@@ -63,7 +71,7 @@ class LDA:
 
             # (4, 1) * (1, 4) = (4,4) -> reshape
             n_c = X_c.shape[0]
-            mean_diff = (mean_c - mean_overall).values
+            mean_diff = ((mean_c - mean_overall).values)**2
             mean_diff = mean_diff.reshape(n_features, 1)
             SB += n_c * (mean_diff).dot(mean_diff.T)
 
@@ -85,12 +93,65 @@ class LDA:
         return self.transformed_X
     
 
-    # performance
 
-    def confusion_matrix(self, y_true, y_pred):
-        TP = np.sum((y_true == 1) & (y_pred == 1))
-        TN = np.sum((y_true == 0) & (y_pred == 0))
-        FP = np.sum((y_true == 0) & (y_pred == 1))
-        FN = np.sum((y_true == 1) & (y_pred == 0))
-        return np.array([[TP, FP], [FN, TN]])
+class KNN:
+    def __init__(self, k=3):
+        self.k = k
+
+    def fit(self, X, y):
+        self.X_train = X
+        self.y_train = y
+
+    def predict(self, X):
+        y_pred = [self._predict(x) for x in X.values]
+        return np.array(y_pred)
+
+    def _predict(self, x):
+        # Compute distances between x and all examples in the training set
+        distances = [euclidean_distance(x, x_train) for x_train in self.X_train.values]
+        # Sort by distance and return indices of the first k neighbors
+        k_idx = np.argsort(distances)[: self.k]
+        # Extract the labels of the k nearest neighbor training samples
+        k_neighbor_labels = [self.y_train[i] for i in k_idx]
+        # return the most common class label
+        most_common = Counter(k_neighbor_labels).most_common(1)
+        return most_common[0][0]
     
+
+
+class LogisticRegression:
+    def __init__(self, lr=0.001, n_iters=1000):
+        self.lr = lr
+        self.n_iters = n_iters
+        self.weights = None
+        self.bias = None
+
+    def fit(self, X, y):
+        # init parameters
+        n_samples, n_features = X.shape
+        self.weights = np.zeros(n_features)
+        self.bias = 0
+
+        # gradient descent
+        for _ in range(self.n_iters):
+            # approximate y with linear combination of weights and x, plus bias
+            linear_model = np.dot(X, self.weights) + self.bias
+            # apply sigmoid function
+            y_predicted = self._sigmoid(linear_model)
+
+            # compute gradients
+            dw = (1 / n_samples) * np.dot(X.T, (y_predicted - y))
+            db = (1 / n_samples) * np.sum(y_predicted - y)
+
+            # update parameters
+            self.weights -= self.lr * dw
+            self.bias -= self.lr * db
+
+    def predict(self, X):
+        linear_model = np.dot(X, self.weights) + self.bias
+        y_predicted = self._sigmoid(linear_model)
+        y_predicted_cls = [1 if i > 0.5 else 0 for i in y_predicted]
+        return np.array(y_predicted_cls)
+    
+    def _sigmoid(self, x):
+        return 1 / (1 + np.exp(-x))
