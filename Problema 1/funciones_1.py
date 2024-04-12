@@ -2,10 +2,42 @@ import numpy as np
 from collections import Counter
 import matplotlib.pyplot as plt
 
+
+
 # general functions
 
 def euclidean_distance(x1, x2):
     return np.sqrt(np.sum((x1 - x2)**2))
+
+def k_folds_cross_validation(X, y, model, k=5, seed=42):
+    n = len(y)
+    fold_size = n // k
+    np.random.seed(seed)
+    indexes = np.random.permutation(n)
+
+    accuracy_ = 0
+    precision_ = 0
+    recall_ = 0
+    f1_ = 0
+    
+    for i in range(k):
+        test_indexes = indexes[i*fold_size:(i+1)*fold_size]
+        train_indexes = np.concatenate([indexes[:i*fold_size], indexes[(i+1)*fold_size:]])
+        
+        X_train = X.iloc[train_indexes]
+        y_train = y[train_indexes]
+        X_test = X.iloc[test_indexes]
+        y_test = y[test_indexes]
+        
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        accuracy_ += accuracy(y_test, y_pred)
+        precision_ += precision(y_test, y_pred)
+        recall_ += recall(y_test, y_pred)
+        f1_ += f1(y_test, y_pred)
+        
+    return accuracy_/k, precision_/k, recall_/k, f1_/k
 
 
 
@@ -42,6 +74,35 @@ def roc(y_true, y_pred):
     FPR = FP / (FP + TN)
     return TPR, FPR
 
+def roc_curve(y_true, y_pred, plot=False, model_name='ROC curve'):
+    thresholds = np.linspace(0, 1, num=100)
+    tpr = []
+    fpr = []
+    for threshold in thresholds:
+        tp = np.sum((y_pred >= threshold) & (y_true == 1))
+        fn = np.sum((y_pred < threshold) & (y_true == 1))
+        tn = np.sum((y_pred < threshold) & (y_true == 0))
+        fp = np.sum((y_pred >= threshold) & (y_true == 0))
+        tpr.append(tp / (tp + fn))
+        fpr.append(fp / (fp + tn))
+    tpr.append(0)
+    fpr.append(0)
+    if plot:        
+        plt.figure(figsize=(8, 8))
+        plt.plot(fpr, tpr, color='blue', lw=2, label='ROC curve')
+        plt.plot([0, 1], [0, 1], color='red', linestyle='--', label='Random guesses')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title(f'ROC Curve for {model_name}')
+        plt.legend(loc='lower right')
+        plt.show()
+    return fpr, tpr
+
+
+
+# models
 
 class LDA:
 
@@ -93,7 +154,6 @@ class LDA:
         return self.transformed_X
     
 
-
 class KNN:
     def __init__(self, k=3):
         self.k = k
@@ -118,13 +178,13 @@ class KNN:
         return most_common[0][0]
     
 
-
 class LogisticRegression:
-    def __init__(self, lr=0.001, n_iters=1000):
+    def __init__(self, lr=0.01, n_iters=1000, lmbda=0.01):      # ver que hacer con lr y n_iters
         self.lr = lr
         self.n_iters = n_iters
         self.weights = None
         self.bias = None
+        self.lmbda = lmbda  # regularization parameter
 
     def fit(self, X, y):
         # init parameters
@@ -139,8 +199,8 @@ class LogisticRegression:
             # apply sigmoid function
             y_predicted = self._sigmoid(linear_model)
 
-            # compute gradients
-            dw = (1 / n_samples) * np.dot(X.T, (y_predicted - y))
+            # compute gradients with regularization
+            dw = (1 / n_samples) * (np.dot(X.T, (y_predicted - y)) + 2 * self.lmbda * self.weights)
             db = (1 / n_samples) * np.sum(y_predicted - y)
 
             # update parameters
@@ -155,3 +215,4 @@ class LogisticRegression:
     
     def _sigmoid(self, x):
         return 1 / (1 + np.exp(-x))
+
