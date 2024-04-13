@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 
 # general functions
 
+def min_max_normalize(X):
+    for column in X.columns:
+        print(column)
+        X[column] = (X[column] - X[column].min()) / (X[column].max() - X[column].min())
+    return X
+
+
 def euclidean_distance(x1, x2):
     return np.sqrt(np.sum((x1 - x2)**2))
 
