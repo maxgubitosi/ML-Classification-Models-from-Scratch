@@ -6,10 +6,15 @@ import matplotlib.pyplot as plt
 
 # general functions
 
-def min_max_normalize(X):
+def get_min_max(X):
+    min_max = {}
     for column in X.columns:
-        print(column)
-        X[column] = (X[column] - X[column].min()) / (X[column].max() - X[column].min())
+        min_max[column] = (X[column].min(), X[column].max())
+    return min_max
+
+def min_max_normalize(X, min_max):
+    for column in X.columns:
+        X[column] = (X[column] - min_max[column][0]) / (min_max[column][1] - min_max[column][0])
     return X
 
 
