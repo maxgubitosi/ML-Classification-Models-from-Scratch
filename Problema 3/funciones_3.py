@@ -58,12 +58,13 @@ def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
     Inputs:
         - X (np.array): input data
         - y (np.array): target data
-        - ds (list): list of regularization parameters
+        - max_depths (list): list of maximum depths for decision trees
+        - forest_sizes (list): list of sizes for the random forest
         - k (int): number of folds
         - seed (int): seed for the random number generator
     Outputs:
-        - acc_train (np.array): training error for each fold and lambda
-        - acc_test (np.array): test error for each fold and lambda
+        - acc_train (np.array): training accuracy for each fold and parameter combination
+        - acc_test (np.array): test accuracy for each fold and parameter combination
     """
     np.random.seed(seed)
     n = X.shape[0]
@@ -72,27 +73,24 @@ def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
 
     for i, depth in enumerate(max_depths):
         for j, forest_size in enumerate(forest_sizes):
-            # idx = np.random.permutation(n)
-            idx = np.arange(n)                                  # without shuffling
-            X_shuffled = X.iloc[idx]  
-            y_shuffled = y[idx]
+            for fold in range(k):
+                idx = np.arange(n)
+                np.random.shuffle(idx)
+                X_shuffled = X.iloc[idx]  
+                y_shuffled = y[idx]
 
-            # print(f'x_shuffled[{i}.shape] = {X_shuffled.shape}')
-            # print(f'y_shuffled[{i}.shape] = {y_shuffled.shape}')
-            
-            for j in range(k):
-                X_train = np.concatenate([X_shuffled[:j*(n//k)], X_shuffled[(j+1)*(n//k):]])
-                y_train = np.concatenate([y_shuffled[:j*(n//k)], y_shuffled[(j+1)*(n//k):]])
-                X_test = X_shuffled[j*(n//k):(j+1)*(n//k)]
-                y_test = y_shuffled[j*(n//k):(j+1)*(n//k)]
+                X_train = np.concatenate([X_shuffled[:fold*(n//k)], X_shuffled[(fold+1)*(n//k):]], axis=0)
+                y_train = np.concatenate([y_shuffled[:fold*(n//k)], y_shuffled[(fold+1)*(n//k):]], axis=0)
+                X_test = X_shuffled[fold*(n//k):(fold+1)*(n//k)]
+                y_test = y_shuffled[fold*(n//k):(fold+1)*(n//k)]
                 
-                rf_model = RandomForest(forest_size, depth)
+                rf_model = RandomForest(n_trees=forest_size, max_depth=depth)
                 rf_model.fit(X_train, y_train)
                 y_train_pred = rf_model.predict(X_train)
-                y_test_pred = rf_model.predict(X_test)
+                y_test_pred = rf_model.predict(X_test.values)
                 
-                acc_train[i, j] = accuracy(y_train, y_train_pred)
-                acc_test[i, j] = accuracy(y_test, y_test_pred)
+                acc_train[i*len(forest_sizes) + j, fold] = accuracy(y_train, y_train_pred)
+                acc_test[i*len(forest_sizes) + j, fold] = accuracy(y_test, y_test_pred)
 
     return acc_train, acc_test
 
