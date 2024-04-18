@@ -68,6 +68,8 @@ def accuracy(y_true, y_pred):
 def precision(y_true, y_pred):
     TP = np.sum((y_true == 1) & (y_pred == 1))
     FP = np.sum((y_true == 0) & (y_pred == 1))
+    if TP + FP == 0:
+        print('No hay verdaderos positivos ni falsos positivos')
     return TP / (TP + FP)
 
 def recall(y_true, y_pred):
@@ -80,17 +82,19 @@ def f1(y_true, y_pred):
     r = recall(y_true, y_pred)
     return 2 * p * r / (p + r)
 
-def roc(y_true, y_pred):
-    TP, TN, FP, FN = confusion_matrix(y_true, y_pred)
-    TPR = TP / (TP + FN)
-    FPR = FP / (FP + TN)
-    return TPR, FPR
+# def roc(y_true, y_pred):
+#     TP, TN, FP, FN = confusion_matrix(y_true, y_pred)
+#     TPR = TP / (TP + FN)
+#     FPR = FP / (FP + TN)
+#     return TPR, FPR
 
-def roc_curve(y_true, y_pred, plot=False, model_name='ROC curve'):
+def roc_curve(y_true, model, X_validation, plot=False, model_name=None):
     thresholds = np.linspace(0, 1, num=100)
     tpr = []
     fpr = []
     for threshold in thresholds:
+        model.threshold = threshold
+        y_pred = model.predict(X_validation)
         tp = np.sum((y_pred >= threshold) & (y_true == 1))
         fn = np.sum((y_pred < threshold) & (y_true == 1))
         tn = np.sum((y_pred < threshold) & (y_true == 0))
@@ -103,8 +107,8 @@ def roc_curve(y_true, y_pred, plot=False, model_name='ROC curve'):
         plt.figure(figsize=(8, 8))
         plt.plot(fpr, tpr, color='blue', lw=2, label='ROC curve')
         plt.plot([0, 1], [0, 1], color='red', linestyle='--', label='Random guesses')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
         plt.title(f'ROC Curve for {model_name}')
@@ -112,7 +116,22 @@ def roc_curve(y_true, y_pred, plot=False, model_name='ROC curve'):
         plt.show()
     return fpr, tpr
 
+def auc_roc(fpr, tpr):
+    # Convertir fpr y tpr en arrays numpy
+    fpr = np.array(fpr)
+    tpr = np.array(tpr)
 
+    # Obtener los índices ordenados
+    sorted_indices = np.argsort(fpr)
+    
+    # Ordenar fpr y tpr según los índices
+    sorted_fpr = fpr[sorted_indices]
+    sorted_tpr = tpr[sorted_indices]
+    
+    # Calcular el área bajo la curva ROC usando np.trapz
+    auc = np.trapz(sorted_tpr, sorted_fpr)
+
+    return auc
 
 # models
 
@@ -167,8 +186,9 @@ class LDA:
     
 
 class KNN:
-    def __init__(self, k=3):
+    def __init__(self, k=3, threshold=0.5):
         self.k = k
+        self.threshold = threshold
 
     def fit(self, X, y):
         self.X_train = X
@@ -185,18 +205,27 @@ class KNN:
         k_idx = np.argsort(distances)[: self.k]
         # Extract the labels of the k nearest neighbor training samples
         k_neighbor_labels = [self.y_train[i] for i in k_idx]
-        # return the most common class label
-        most_common = Counter(k_neighbor_labels).most_common(1)
-        return most_common[0][0]
+        # Count occurrences of each class label
+        class_counts = Counter(k_neighbor_labels)
+        # Calculate the fraction of the dominant class
+        dominant_class = class_counts.most_common(1)[0][1] / self.k
+        # Check if the dominant fraction exceeds the threshold
+        if dominant_class >= self.threshold:
+            # Return the most common class label
+            return class_counts.most_common(1)[0][0]
+        else:
+            # Return a default label or None if the threshold is not met
+            return 0
     
 
 class LogisticRegression:
-    def __init__(self, lr=0.01, n_iters=1000, lmbda=0.01):      # ver que hacer con lr y n_iters
+    def __init__(self, lr=0.01, n_iters=1000, lmbda=0.01, threshold=0.5):      # ver que hacer con lr y n_iters
         self.lr = lr
         self.n_iters = n_iters
         self.weights = None
         self.bias = None
         self.lmbda = lmbda  # regularization parameter
+        self.threshold = threshold
 
     def fit(self, X, y):
         # init parameters
@@ -222,7 +251,7 @@ class LogisticRegression:
     def predict(self, X):
         linear_model = np.dot(X, self.weights) + self.bias
         y_predicted = self._sigmoid(linear_model)
-        y_predicted_cls = [1 if i > 0.5 else 0 for i in y_predicted]
+        y_predicted_cls = [1 if i > self.threshold else 0 for i in y_predicted]
         return np.array(y_predicted_cls)
     
     def _sigmoid(self, x):
