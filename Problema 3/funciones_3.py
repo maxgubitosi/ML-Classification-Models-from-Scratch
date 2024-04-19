@@ -70,6 +70,8 @@ def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
     n = X.shape[0]
     acc_train = np.zeros((len(max_depths) * len(forest_sizes), k))
     acc_test = np.zeros((len(max_depths) * len(forest_sizes), k))
+    acc_0 = np.zeros((len(max_depths) * len(forest_sizes), k))
+    acc_3 = np.zeros((len(max_depths) * len(forest_sizes), k))
 
     for i, depth in enumerate(max_depths):
         for j, forest_size in enumerate(forest_sizes):
@@ -92,47 +94,54 @@ def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
                 acc_train[i*len(forest_sizes) + j, fold] = accuracy(y_train, y_train_pred)
                 acc_test[i*len(forest_sizes) + j, fold] = accuracy(y_test, y_test_pred)
 
-    return acc_train, acc_test
+                acc_0[i*len(forest_sizes) + j, fold] = acc_class_0(y_test, y_test_pred)
+                acc_3[i*len(forest_sizes) + j, fold] = acc_class_3(y_test, y_test_pred)
+
+    return acc_train, acc_test, acc_0, acc_3
 
 
 # performance metrics
 
-def confusion_matrix(y_true, y_pred):
-    TP = np.sum((y_true == 1) & (y_pred == 1))
-    TN = np.sum((y_true == 0) & (y_pred == 0))
-    FP = np.sum((y_true == 0) & (y_pred == 1))
-    FN = np.sum((y_true == 1) & (y_pred == 0))
-    return TP, TN, FP, FN
+# def confusion_matrix(y_true, y_pred):
+#     TP = np.sum((y_true == 1) & (y_pred == 1))
+#     TN = np.sum((y_true == 0) & (y_pred == 0))
+#     FP = np.sum((y_true == 0) & (y_pred == 1))
+#     FN = np.sum((y_true == 1) & (y_pred == 0))
+#     return TP, TN, FP, FN
     
 def accuracy(y_true, y_pred):
     return np.sum(y_true == y_pred) / len(y_true)
 
-def precision(y_true, y_pred):
-    TP = np.sum((y_true == 1) & (y_pred == 1))
-    FP = np.sum((y_true == 0) & (y_pred == 1))
-    return TP / (TP + FP)
+def acc_class_0(y_true, y_pred):
+    return np.sum(y_true[y_true == 0] == y_pred[y_true == 0]) / len(y_true[y_true == 0])
 
-def recall(y_true, y_pred):
-    TP = np.sum((y_true == 1) & (y_pred == 1))
-    FN = np.sum((y_true == 1) & (y_pred == 0))
-    return TP / (TP + FN)
+def acc_class_3(y_true, y_pred):
+    return np.sum(y_true[y_true == 3] == y_pred[y_true == 3]) / len(y_true[y_true == 3])
 
-def f1(y_true, y_pred):
-    p = precision(y_true, y_pred)
-    r = recall(y_true, y_pred)
-    return 2 * p * r / (p + r)
+# def precision(y_true, y_pred):
+#     TP = np.sum((y_true == 1) & (y_pred == 1))
+#     FP = np.sum((y_true == 0) & (y_pred == 1))
+#     return TP / (TP + FP)
 
-def roc(y_true, y_pred):
-    TP, TN, FP, FN = confusion_matrix(y_true, y_pred)
-    TPR = TP / (TP + FN)
-    FPR = FP / (FP + TN)
-    return TPR, FPR
+# def recall(y_true, y_pred):
+#     TP = np.sum((y_true == 1) & (y_pred == 1))
+#     FN = np.sum((y_true == 1) & (y_pred == 0))
+#     return TP / (TP + FN)
 
-def roc_curve(y_true, y_pred, plot=False, model_name='ROC curve'):
+# def f1(y_true, y_pred):
+#     p = precision(y_true, y_pred)
+#     r = recall(y_true, y_pred)
+#     return 2 * p * r / (p + r)
+
+
+
+def roc_curve(y_true, model, X_validation, plot=False, model_name=None):
     thresholds = np.linspace(0, 1, num=100)
     tpr = []
     fpr = []
     for threshold in thresholds:
+        model.threshold = threshold
+        y_pred = model.predict(X_validation)
         tp = np.sum((y_pred >= threshold) & (y_true == 1))
         fn = np.sum((y_pred < threshold) & (y_true == 1))
         tn = np.sum((y_pred < threshold) & (y_true == 0))
@@ -145,14 +154,31 @@ def roc_curve(y_true, y_pred, plot=False, model_name='ROC curve'):
         plt.figure(figsize=(8, 8))
         plt.plot(fpr, tpr, color='blue', lw=2, label='ROC curve')
         plt.plot([0, 1], [0, 1], color='red', linestyle='--', label='Random guesses')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
         plt.title(f'ROC Curve for {model_name}')
         plt.legend(loc='lower right')
         plt.show()
     return fpr, tpr
+
+def auc_roc(fpr, tpr):
+    # Convertir fpr y tpr en arrays numpy
+    fpr = np.array(fpr)
+    tpr = np.array(tpr)
+
+    # Obtener los índices ordenados
+    sorted_indices = np.argsort(fpr)
+    
+    # Ordenar fpr y tpr según los índices
+    sorted_fpr = fpr[sorted_indices]
+    sorted_tpr = tpr[sorted_indices]
+    
+    # Calcular el área bajo la curva ROC usando np.trapz
+    auc = np.trapz(sorted_tpr, sorted_fpr)
+
+    return auc
 
 
 
@@ -294,20 +320,14 @@ class RandomForest:
             X_sample, y_sample = self._bootstrap_sample(X, y)
             tree.fit(X_sample, y_sample)
             self.trees.append(tree)
-
+    
     def predict(self, X):
         tree_preds = np.array([tree.predict(X) for tree in self.trees])
-        tree_preds = np.swapaxes(tree_preds, 0, 1)
-        y_pred = [self._most_common_label(tree_pred) for tree_pred in tree_preds]
-        return np.array(y_pred)
+        y_pred = np.mean(tree_preds, axis=0)  # Calculate average prediction from all trees
+        y_pred = np.round(y_pred).astype(int)
+        return y_pred
     
     def _bootstrap_sample(self, X, y):
         n_samples = X.shape[0]
         idxs = np.random.choice(n_samples, size=n_samples, replace=True)
         return X[idxs], y[idxs]
-    
-    def _most_common_label(self, y):
-        counter = Counter(y)
-        most_common = counter.most_common(1)[0][0]
-        return most_common
-    
