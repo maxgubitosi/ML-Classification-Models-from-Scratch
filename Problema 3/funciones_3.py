@@ -39,17 +39,17 @@ def entropy(y):
     ps = hist / len(y)
     return -np.sum([p * np.log2(p) for p in ps if p > 0])
 
-class Node:
+class DT_Node:
     def __init__(
-        self, feature=None, threshold=None, left=None, right=None, *, value=None
+        self, feature=None, threshold=None, l=None, r=None, *, value=None
     ):
         self.feature = feature
         self.threshold = threshold
-        self.left = left
-        self.right = right
+        self.l = l
+        self.r = r
         self.value = value
 
-    def is_leaf_node(self):
+    def is_leaf_DT_node(self):
         return self.value is not None
     
 def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
@@ -151,7 +151,7 @@ def roc_curve(y_true, model, X_validation, plot=False, model_name=None):
     tpr.append(0)
     fpr.append(0)
     if plot:        
-        plt.figure(figsize=(8, 8))
+        plt.finfo_gainure(finfo_gainsize=(8, 8))
         plt.plot(fpr, tpr, color='blue', lw=2, label='ROC curve')
         plt.plot([0, 1], [0, 1], color='red', linestyle='--', label='Random guesses')
         plt.xlim([-0.05, 1.05])
@@ -159,7 +159,7 @@ def roc_curve(y_true, model, X_validation, plot=False, model_name=None):
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
         plt.title(f'ROC Curve for {model_name}')
-        plt.legend(loc='lower right')
+        plt.legend(loc='lower r')
         plt.show()
     return fpr, tpr
 
@@ -197,56 +197,54 @@ class KNN:
     def _predict(self, x):
         # Compute distances between x and all examples in the training set
         distances = [euclidean_distance(x, x_train) for x_train in self.X_train.values]
-        # Sort by distance and return indices of the first k neighbors
+        # Sort by distance and return indices of the first k neinfo_gainhbors
         k_idx = np.argsort(distances)[: self.k]
-        # Extract the labels of the k nearest neighbor training samples
-        k_neighbor_labels = [self.y_train[i] for i in k_idx]
+        # Extract the labels of the k nearest neinfo_gainhbor training samples
+        k_neinfo_gainhbor_labels = [self.y_train[i] for i in k_idx]
         # return the most common class label
-        most_common = Counter(k_neighbor_labels).most_common(1)
+        most_common = Counter(k_neinfo_gainhbor_labels).most_common(1)
         return most_common[0][0]
     
 
 
 class DecisionTree:
     def __init__(self, min_samples_split=2, max_depth=100, n_feats=None):
-        self.min_samples_split = min_samples_split
         self.max_depth = max_depth
         self.n_feats = n_feats
+        self.min_samples_split = min_samples_split
         self.root = None
 
     def fit(self, X, y):
         self.n_feats = X.shape[1] if not self.n_feats else min(self.n_feats, X.shape[1])
-        self.root = self._grow_tree(X, y)
+        self.root = self._grow_DT(X, y)
 
     def predict(self, X):
-        return np.array([self._traverse_tree(x, self.root) for x in X])
+        return np.array([self._traverse_DT(x, self.root) for x in X])
 
-    def _grow_tree(self, X, y, depth=0):
+    # Aux functions
+
+    def _grow_DT(self, X, y, depth=0):
         n_samples, n_features = X.shape
         n_labels = len(np.unique(y))
 
-        # stopping criteria
+        # stop (prune to avoid overfitting)
         if (
             depth >= self.max_depth
             or n_labels == 1
             or n_samples < self.min_samples_split
         ):
-            leaf_value = self._most_common_label(y)
-            return Node(value=leaf_value)
+            leaf_value = self._choose_label(y)
+            return DT_Node(value=leaf_value)
 
         feat_idxs = np.random.choice(n_features, self.n_feats, replace=False)
-
-        # greedily select the best split according to information gain
         best_feat, best_thresh = self._best_criteria(X, y, feat_idxs)
-
-        # grow the children that result from the split
-        left_idxs, right_idxs = self._split(X[:, best_feat], best_thresh)
-        left = self._grow_tree(X[left_idxs, :], y[left_idxs], depth + 1)
-        right = self._grow_tree(X[right_idxs, :], y[right_idxs], depth + 1)
-        return Node(best_feat, best_thresh, left, right)
+        l_idxs, r_idxs = self._split(X[:, best_feat], best_thresh)
+        l = self._grow_DT(X[l_idxs, :], y[l_idxs], depth + 1)
+        r = self._grow_DT(X[r_idxs, :], y[r_idxs], depth + 1)
+        return DT_Node(best_feat, best_thresh, l, r)
 
     def _best_criteria(self, X, y, feat_idxs):
-        best_gain = -1
+        max_gain = -1
         split_idx, split_thresh = None, None
         for feat_idx in feat_idxs:
             X_column = X[:, feat_idx]
@@ -254,8 +252,8 @@ class DecisionTree:
             for threshold in thresholds:
                 gain = self._information_gain(y, X_column, threshold)
 
-                if gain > best_gain:
-                    best_gain = gain
+                if gain > max_gain:
+                    max_gain = gain
                     split_idx = feat_idx
                     split_thresh = threshold
 
@@ -266,39 +264,40 @@ class DecisionTree:
         parent_entropy = entropy(y)
 
         # generate split
-        left_idxs, right_idxs = self._split(X_column, split_thresh)
+        l_idxs, r_idxs = self._split(X_column, split_thresh)
 
-        if len(left_idxs) == 0 or len(right_idxs) == 0:
+        if len(l_idxs) == 0 or len(r_idxs) == 0:
             return 0
 
-        # compute the weighted avg. of the loss for the children
+        # children loss
         n = len(y)
-        n_l, n_r = len(left_idxs), len(right_idxs)
-        e_l, e_r = entropy(y[left_idxs]), entropy(y[right_idxs])
+        n_l, n_r = len(l_idxs), len(r_idxs)
+        e_l, e_r = entropy(y[l_idxs]), entropy(y[r_idxs])
         child_entropy = (n_l / n) * e_l + (n_r / n) * e_r
 
         # information gain is difference in loss before vs. after split
-        ig = parent_entropy - child_entropy
-        return ig
+        info_gain = parent_entropy - child_entropy
+        return info_gain
 
+    def _traverse_DT(self, x, DT_node):
+        if DT_node.is_leaf_DT_node():
+            return DT_node.value
+
+        if x[DT_node.feature] <= DT_node.threshold:
+            return self._traverse_DT(x, DT_node.l)
+        return self._traverse_DT(x, DT_node.r)
+    
     def _split(self, X_column, split_thresh):
-        left_idxs = np.argwhere(X_column <= split_thresh).flatten()
-        right_idxs = np.argwhere(X_column > split_thresh).flatten()
-        return left_idxs, right_idxs
+        l_idxs = np.argwhere(X_column <= split_thresh).flatten()
+        r_idxs = np.argwhere(X_column > split_thresh).flatten()
+        return l_idxs, r_idxs
 
-    def _traverse_tree(self, x, node):
-        if node.is_leaf_node():
-            return node.value
-
-        if x[node.feature] <= node.threshold:
-            return self._traverse_tree(x, node.left)
-        return self._traverse_tree(x, node.right)
-
-    def _most_common_label(self, y):
+    def _choose_label(self, y):
         counter = Counter(y)
         most_common = counter.most_common(1)[0][0]
         return most_common
     
+
 
 class RandomForest:
     def __init__(self, n_trees=100, max_depth=10, min_samples_split=2, n_feats=None, seed=42):

@@ -88,12 +88,19 @@ def f1(y_true, y_pred):
 #     FPR = FP / (FP + TN)
 #     return TPR, FPR
 
-def roc_curve(y_true, model, X_validation, plot=False, model_name=None):
-    thresholds = np.linspace(0, 1, num=100)
+def roc_curve(y_true, model, X_validation, plot=False, model_name=None, thresh_iters=100, thresh_range=(0, 1)):
+    thresholds = np.linspace(thresh_range[0], thresh_range[1], num=thresh_iters)
+    print(thresh_range[0], thresh_range[1])
+    
     tpr = []
     fpr = []
     for threshold in thresholds:
         model.threshold = threshold
+        if 'logistic regression' in model_name.lower():
+            model.fit(X_validation, y_true)
+        elif 'lda' in model_name.lower():
+            model.fit(X_validation, y_true)
+            model.transform(X_validation)
         y_pred = model.predict(X_validation)
         tp = np.sum((y_pred >= threshold) & (y_true == 1))
         fn = np.sum((y_pred < threshold) & (y_true == 1))
@@ -137,10 +144,11 @@ def auc_roc(fpr, tpr):
 
 class LDA:
 
-    def __init__(self, n_components=2):
+    def __init__(self, n_components=2, threshold=0):
         self.n_components = n_components
         self.linear_discriminants = None
         self.transformed_X = None
+        self.threshold = threshold
 
     def fit(self, X, y):
         n_features = X.shape[1]
@@ -184,7 +192,10 @@ class LDA:
         self.transformed_X = np.dot(X, self.linear_discriminants.T)
         return self.transformed_X
     
-
+    def predict(self, X):
+        y_pred = (self.transformed_X > self.threshold).flatten()
+        return y_pred
+    
 class KNN:
     def __init__(self, k=3, threshold=0.5):
         self.k = k
@@ -219,37 +230,37 @@ class KNN:
     
 
 class LogisticRegression:
-    def __init__(self, lr=0.01, n_iters=1000, lmbda=0.01, threshold=0.5):      # ver que hacer con lr y n_iters
+    def __init__(self, lr=0.01, max_iter=1000, lmbda=0.01, threshold=0.5):      # ver que hacer con lr y max_iter
         self.lr = lr
-        self.n_iters = n_iters
-        self.weights = None
-        self.bias = None
+        self.max_iter = max_iter
+        self.W = None
+        self.b = None
         self.lmbda = lmbda  # regularization parameter
         self.threshold = threshold
 
     def fit(self, X, y):
-        # init parameters
+        # initial parameters (null weights and bias)
         n_samples, n_features = X.shape
-        self.weights = np.zeros(n_features)
-        self.bias = 0
+        self.W = np.zeros(n_features)
+        self.b = 0
 
         # gradient descent
-        for _ in range(self.n_iters):
-            # approximate y with linear combination of weights and x, plus bias
-            linear_model = np.dot(X, self.weights) + self.bias
+        for _ in range(self.max_iter):
+            # approximate y with linear combination of W and x, plus b
+            linear_model = np.dot(X, self.W) + self.b
             # apply sigmoid function
             y_predicted = self._sigmoid(linear_model)
 
             # compute gradients with regularization
-            dw = (1 / n_samples) * (np.dot(X.T, (y_predicted - y)) + 2 * self.lmbda * self.weights)
+            dw = (1 / n_samples) * (np.dot(X.T, (y_predicted - y)) + 2 * self.lmbda * self.W)
             db = (1 / n_samples) * np.sum(y_predicted - y)
 
             # update parameters
-            self.weights -= self.lr * dw
-            self.bias -= self.lr * db
+            self.W -= self.lr * dw
+            self.b -= self.lr * db
 
     def predict(self, X):
-        linear_model = np.dot(X, self.weights) + self.bias
+        linear_model = np.dot(X, self.W) + self.b
         y_predicted = self._sigmoid(linear_model)
         y_predicted_cls = [1 if i > self.threshold else 0 for i in y_predicted]
         return np.array(y_predicted_cls)
