@@ -90,9 +90,9 @@ def roc_curve(y_true, model, X_validation, plot=False, model_name=None, thresh_i
     fpr = []
     for threshold in thresholds:
         model.threshold = threshold
-        if 'lda' in model_name.lower():
-            model.fit(X_validation, y_true)
-            model.transform(X_validation)
+        # if 'lda' in model_name.lower():
+            # model.fit(X_validation, y_true)
+            # model.transform(X_validation)
         y_pred = model.predict(X_validation)
         tp = np.sum((y_pred >= threshold) & (y_true == 1))
         fn = np.sum((y_pred < threshold) & (y_true == 1))
