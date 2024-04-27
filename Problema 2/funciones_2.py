@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 
+
 # general functions
 
 def get_min_max(X):
@@ -22,7 +23,6 @@ def entropy(y):
     ps = hist / len(y)
     return -np.sum([p * np.log2(p) for p in ps if p > 0])
 
-
 class Node():
     def __init__(self, data, feature_idx, feature_val, prediction_probs, information_gain) -> None:
         self.data = data
@@ -36,7 +36,7 @@ class Node():
 
 
 
-# re-balance the classes
+# class re-balance
 
 def undersample(X, y):
     """
@@ -63,31 +63,61 @@ def oversample(X, y):
     """
     Creates new samples in the minority class randomly until the classes are balanced
     """
-    # Convert DataFrame to NumPy array
     X_array = X.values
-
-    # find the class with the least samples and the class with the most samples
-    classes, counts = np.unique(y, return_counts=True)
+    classes, counts = np.unique(y, return_counts=True)   
     minority_class = classes[np.argmin(counts)]
     majority_class = classes[np.argmax(counts)]
     max_class_size = np.max(counts)
-    # find the indexes of the samples in the minority class
-    minority_indexes = np.where(y == minority_class)[0]
+    minority_indexes = np.where(y == minority_class)[0]   # indexes of the samples in the minority class
     # randomly duplicate samples from the minority class until the classes are balanced
     indexes_to_duplicate = np.random.choice(minority_indexes, size=max_class_size, replace=True)
-    # concatenate the samples from the minority class and the samples from the majority class that were kept
     X_balanced = np.concatenate([X_array[y == majority_class], X_array[indexes_to_duplicate]])
     y_balanced = np.concatenate([y[y == majority_class], y[indexes_to_duplicate]])
     return X_balanced, y_balanced
 
+def smote(X, y, k=5, seed=None, oversampling_ratio=1.0):
+    np.random.seed(seed)
+    X_minority = X[y == 1]    
+    n_samples = int(len(X_minority) * oversampling_ratio)   # number of samples to create    
+    indices = np.random.choice(len(X_minority), size=n_samples, replace=True)
+    synthetic_samples = []
+    
+    for index in indices:
+        distances = np.linalg.norm(X_minority - X_minority[index], axis=1)   # calculate the distances between the current sample and all the other samples
+        nearest_neighbors_indices = np.argsort(distances)
+        nearest_neighbors_indices = nearest_neighbors_indices[1:k+1]
+        chosen_neighbor_index = np.random.choice(nearest_neighbors_indices)
+        synthetic_sample = X_minority[index] + np.random.rand() * (X_minority[chosen_neighbor_index] - X_minority[index])
+        synthetic_samples.append(synthetic_sample)
+    
+    X_resampled = np.vstack((X, np.array(synthetic_samples)))
+    y_resampled = np.concatenate((y, np.ones(len(synthetic_samples)))).astype(int)
+    
+    return X_resampled, y_resampled
+
 
 # performance metrics
 
-def confusion_matrix(y_true, y_pred):
+def confusion_matrix(y_true, y_pred, model_name=None, plot=True):
     TP = np.sum((y_true == 1) & (y_pred == 1))
     TN = np.sum((y_true == 0) & (y_pred == 0))
     FP = np.sum((y_true == 0) & (y_pred == 1))
     FN = np.sum((y_true == 1) & (y_pred == 0))
+    if plot:
+        values = np.array([[TP, FP], [FN, TN]])
+        fig, ax = plt.subplots()
+        ax.imshow(values, cmap='Blues')
+        for i in range(2):
+            for j in range(2):
+                ax.text(j, i, f'{"TP" if i == 0 and j == 0 else "FP" if i == 0 and j == 1 else "FN" if i == 1 and j == 0 else "TN"}\n{values[i, j]}', ha='center', va='center', color='black')
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
+        ax.set_xlabel('Predicted Values')
+        ax.set_ylabel('True Values')
+
+        if model_name: plt.title(f'Confusion Matrix for {model_name}')
+        else: plt.title('Confusion Matrix')
+        plt.show()
     return TP, TN, FP, FN
     
 def accuracy(y_true, y_pred):
@@ -110,15 +140,10 @@ def f1(y_true, y_pred):
 
 def roc_curve(y_true, model, X_validation, plot=False, model_name=None, thresh_iters=100, thresh_range=(0, 1)):
     thresholds = np.linspace(thresh_range[0], thresh_range[1], num=thresh_iters)
-    # print(thresh_range[0], thresh_range[1])
-    
     tpr = []
     fpr = []
     for threshold in thresholds:
         model.threshold = threshold
-        if 'lda' in model_name.lower():
-            model.fit(X_validation, y_true)
-            model.transform(X_validation)
         y_pred = model.predict(X_validation)
         tp = np.sum((y_pred >= threshold) & (y_true == 1))
         fn = np.sum((y_pred < threshold) & (y_true == 1))
@@ -142,25 +167,58 @@ def roc_curve(y_true, model, X_validation, plot=False, model_name=None, thresh_i
     return fpr, tpr
 
 def auc_roc(fpr, tpr):
-    # Convertir fpr y tpr en arrays numpy
     fpr = np.array(fpr)
     tpr = np.array(tpr)
-
-    # Obtener los índices ordenados
     sorted_indices = np.argsort(fpr)
-
-    # Ordenar fpr y tpr según los índices
     sorted_fpr = fpr[sorted_indices]
     sorted_tpr = tpr[sorted_indices]
+    auc = np.trapz(sorted_tpr, sorted_fpr)   # calculate area under the curve (numerical integration)
+    return auc
 
-    # Calcular el área bajo la curva ROC usando np.trapz
-    auc = np.trapz(sorted_tpr, sorted_fpr)
+def pr_curve(y_true, model, X_validation, plot=False, model_name=None, thresh_iters=100, thresh_range=(0, 1)):
+    thresholds = np.linspace(thresh_range[0], thresh_range[1], num=thresh_iters)
+    
+    precision = []
+    recall = []
+    for threshold in thresholds:
+        model.threshold = threshold
+        y_pred = model.predict(X_validation)
+        tp = np.sum((y_pred >= threshold) & (y_true == 1))
+        fn = np.sum((y_pred < threshold) & (y_true == 1))
+        tn = np.sum((y_pred < threshold) & (y_true == 0))
+        fp = np.sum((y_pred >= threshold) & (y_true == 0))
+        if tp + fp == 0:
+            precision.append(1)
+        else:
+            precision.append(tp / (tp + fp))
+        recall.append(tp / (tp + fn))
+    precision.append(1)
+    recall.append(0)
+    if plot:        
+        plt.figure(figsize=(8, 8))
+        plt.plot(recall, precision, color='blue', lw=2, label='PR curve')
+        plt.plot([0, 1], [1, 0], 'red', label='Random Guesses')
+        plt.xlim([-0.05, 1.05])
+        plt.ylim([-0.05, 1.05])
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve for {model_name}')
+        plt.legend(loc='lower left')
+        plt.show()
+    return recall, precision
 
+def auc_pr(recall, precision):
+    recall = np.array(recall)
+    precision = np.array(precision)
+    sorted_indices = np.argsort(recall)
+    sorted_recall = recall[sorted_indices]
+    sorted_precision = precision[sorted_indices]
+    auc = np.trapz(sorted_precision, sorted_recall)   # calculate area under curve (numerical integration)
     return auc
 
 
 
-# Esta clase corresponde a la implementación realizada para el TP2 de la materia
+# Nota: Esta clase corresponde a la implementación realizada para el TP2 de la materia
 class MLP(object):
 
     def __init__(self, input_size, layers=[6, 30, 1], activations='default', seed=42, verbose=False, threshold=0.5):
@@ -179,7 +237,6 @@ class MLP(object):
     def check_compatability(self):
         assert len(self.activations) == self.num_layers, 'Debe haber una función de activación por capa'
 
-
     def set_weights_and_biases(self):
         """
         Initialize weights and biases randomly
@@ -190,7 +247,6 @@ class MLP(object):
         if self.verbose:
             print(f"b.shape: {self.biases[0].shape}")
             print(f"W.shape: {self.weights[0].shape}")
-
 
     def activation_function(self, activation_str):
         """
@@ -209,7 +265,6 @@ class MLP(object):
             return lambda z : 1 / (1 + np.exp(-z))
         else:
             print("Invalid activation function")
-        
 
     def deriv_activation_function(self, activation_str):
         """
@@ -229,12 +284,8 @@ class MLP(object):
         else:
             print("Invalid activation function")
 
-
     def compute_loss(self, a_out, y):
-        # Binary cross-entropy loss
-        return -np.mean(y * np.log(a_out) + (1 - y) * np.log(1 - a_out))
-
-
+        return -np.mean(y * np.log(a_out) + (1 - y) * np.log(1 - a_out))   # binary cross-entropy loss
 
     def forward_pass(self, X):
         """
@@ -246,9 +297,9 @@ class MLP(object):
             - a (list): list of activations
             - z (list): list of weighted inputs
         """
-        # print(f"X shape: {X.shape}")
-        # z = [np.array(X).reshape(-1, 1)]
-        z = [X.T]
+        # print(f"X shape: {X.shape}")         
+        # z = [np.array(X).reshape(-1, 1)]      # en esta parte hay un error: para fit hay que usar esta línea
+        z = [X.T]                               # para predict hay que usar esta línea en lugar de la anterior
         # print(f"z shape: {z.shape}")
         a = []
 
@@ -277,7 +328,6 @@ class MLP(object):
             print(f"a.shape: {a[0].shape}", end=" ")
 
         return a, z
-
 
     def backward_pass(self, a, z, y):
         """
@@ -310,7 +360,6 @@ class MLP(object):
         loss = self.compute_loss(a[-1], y)
         return loss, nabla_w, nabla_b
 
-
     def update_mini_batch(self, mini_batch, alpha):
         """
         Update weights and biases using mini-batch gradient descent
@@ -336,7 +385,6 @@ class MLP(object):
         self.biases = [b - (alpha / len(mini_batch)) * nb for b, nb in zip(self.biases, nabla_b)]
         return total_loss
 
-
     def update_single_example(self, x, y, alpha):
         """
         Update weights and biases using single example gradient descent
@@ -354,7 +402,6 @@ class MLP(object):
         self.biases = [b - alpha * nb for b, nb in zip(self.biases, nabla_b)]
         return loss
 
-
     def evaluate(self, test_data):
         """
         Evaluate the network on test data
@@ -369,7 +416,6 @@ class MLP(object):
             pred = self.forward_pass(x)[-1][-1].flatten()
             sum_sq_error += self.compute_loss(pred, y)
         return sum_sq_error / len(test_data)
-
 
     def fit(self, training_data, test_data, mini_batch_size, alpha=0.01, max_epochs=100, update_rule='mini_batch'):
         """
@@ -431,7 +477,7 @@ class MLP(object):
         X = X.values
         a, _ = self.forward_pass(X)
         return (a[-1] > self.threshold).astype(int)
-    
+
 
 
 class DecisionTree():

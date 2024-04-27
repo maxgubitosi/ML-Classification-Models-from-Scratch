@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
 
+
+
 # general functions
 
 def get_min_max(X):
@@ -73,7 +75,7 @@ def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
     acc_0 = np.zeros((len(max_depths) * len(forest_sizes), k))
     acc_3 = np.zeros((len(max_depths) * len(forest_sizes), k))
 
-    for i, depth in enumerate(max_depths):
+    for i, depth in tqdm(enumerate(max_depths), desc='Max Depths'):
         for j, forest_size in enumerate(forest_sizes):
             for fold in range(k):
                 idx = np.arange(n)
@@ -94,91 +96,70 @@ def cross_validation(X, y, max_depths, forest_sizes, k=10, seed=42):
                 acc_train[i*len(forest_sizes) + j, fold] = accuracy(y_train, y_train_pred)
                 acc_test[i*len(forest_sizes) + j, fold] = accuracy(y_test, y_test_pred)
 
-                acc_0[i*len(forest_sizes) + j, fold] = acc_class_0(y_test, y_test_pred)
-                acc_3[i*len(forest_sizes) + j, fold] = acc_class_3(y_test, y_test_pred)
+                acc_0[i*len(forest_sizes) + j, fold] = prec_class_0(y_test, y_test_pred)
+                acc_3[i*len(forest_sizes) + j, fold] = prec_class_3(y_test, y_test_pred)
 
     return acc_train, acc_test, acc_0, acc_3
+
+def smote(X, y, k=5, seed=None):
+    np.random.seed(seed)
+    synthetic_samples = []
+    
+    # find minority and majority classes
+    majority_class = np.argmax(np.bincount(y))
+    minority_classes = np.unique(y)[np.unique(y) != majority_class]
+    majority_samples = np.sum(y == majority_class)      # samples in majority class
+    
+    for minority_class in minority_classes:
+        X_minority = X[y == minority_class]
+        n_samples = majority_samples - len(X_minority)   # number of samples to create for the given class
+        indices = np.random.choice(len(X_minority), size=n_samples, replace=True)
+        for index in indices:
+            distances = np.linalg.norm(X_minority - X_minority[index], axis=1)      # calculate distances between the current sample and all other samples
+            nearest_neighbors_indices = np.argsort(distances)
+            nearest_neighbors_indices = nearest_neighbors_indices[1:k+1]
+            chosen_neighbor_index = np.random.choice(nearest_neighbors_indices)
+            synthetic_sample = X_minority[index] + np.random.rand() * (X_minority[chosen_neighbor_index] - X_minority[index])
+            synthetic_samples.append(synthetic_sample)
+    
+    X_resampled = np.vstack((X, np.array(synthetic_samples)))
+    y_resampled = np.concatenate((y, np.tile(minority_classes, majority_samples // len(minority_classes)))).astype(int)
+    
+    return X_resampled, y_resampled
+
 
 
 # performance metrics
 
-# def confusion_matrix(y_true, y_pred):
-#     TP = np.sum((y_true == 1) & (y_pred == 1))
-#     TN = np.sum((y_true == 0) & (y_pred == 0))
-#     FP = np.sum((y_true == 0) & (y_pred == 1))
-#     FN = np.sum((y_true == 1) & (y_pred == 0))
-#     return TP, TN, FP, FN
-    
+def confusion_matrix(y_true, y_pred, num_classes=4, model_name=None, plot=True):
+    confusion_mat = np.zeros((num_classes, num_classes), dtype=int)
+    for true_label in range(num_classes):
+        for pred_label in range(num_classes):
+            confusion_mat[true_label, pred_label] = np.sum((y_true == true_label) & (y_pred == pred_label))
+
+    if plot:
+        fig, ax = plt.subplots()
+        ax.imshow(confusion_mat, cmap='Blues')
+        for i in range(num_classes):
+            for j in range(num_classes):
+                ax.text(j, i, f'\n{confusion_mat[i, j]}', ha='center', va='center', color='black')        
+        ax.set_xticks(np.arange(num_classes))
+        ax.set_yticks(np.arange(num_classes))
+        if model_name: plt.title(f'Confusion Matrix for {model_name}')
+        else: plt.title('Confusion Matrix')
+        plt.xlabel('Predicted')
+        plt.ylabel('True')
+        plt.show()    
+    return confusion_mat
+
 def accuracy(y_true, y_pred):
     return np.sum(y_true == y_pred) / len(y_true)
 
-def acc_class_0(y_true, y_pred):
+def prec_class_0(y_true, y_pred):
     return np.sum(y_true[y_true == 0] == y_pred[y_true == 0]) / len(y_true[y_true == 0])
 
-def acc_class_3(y_true, y_pred):
+def prec_class_3(y_true, y_pred):
     return np.sum(y_true[y_true == 3] == y_pred[y_true == 3]) / len(y_true[y_true == 3])
-
-# def precision(y_true, y_pred):
-#     TP = np.sum((y_true == 1) & (y_pred == 1))
-#     FP = np.sum((y_true == 0) & (y_pred == 1))
-#     return TP / (TP + FP)
-
-# def recall(y_true, y_pred):
-#     TP = np.sum((y_true == 1) & (y_pred == 1))
-#     FN = np.sum((y_true == 1) & (y_pred == 0))
-#     return TP / (TP + FN)
-
-# def f1(y_true, y_pred):
-#     p = precision(y_true, y_pred)
-#     r = recall(y_true, y_pred)
-#     return 2 * p * r / (p + r)
-
-
-
-def roc_curve(y_true, model, X_validation, plot=False, model_name=None):
-    thresholds = np.linspace(0, 1, num=100)
-    tpr = []
-    fpr = []
-    for threshold in thresholds:
-        model.threshold = threshold
-        y_pred = model.predict(X_validation)
-        tp = np.sum((y_pred >= threshold) & (y_true == 1))
-        fn = np.sum((y_pred < threshold) & (y_true == 1))
-        tn = np.sum((y_pred < threshold) & (y_true == 0))
-        fp = np.sum((y_pred >= threshold) & (y_true == 0))
-        tpr.append(tp / (tp + fn))
-        fpr.append(fp / (fp + tn))
-    tpr.append(0)
-    fpr.append(0)
-    if plot:        
-        plt.finfo_gainure(finfo_gainsize=(8, 8))
-        plt.plot(fpr, tpr, color='blue', lw=2, label='ROC curve')
-        plt.plot([0, 1], [0, 1], color='red', linestyle='--', label='Random guesses')
-        plt.xlim([-0.05, 1.05])
-        plt.ylim([-0.05, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title(f'ROC Curve for {model_name}')
-        plt.legend(loc='lower r')
-        plt.show()
-    return fpr, tpr
-
-def auc_roc(fpr, tpr):
-    # Convertir fpr y tpr en arrays numpy
-    fpr = np.array(fpr)
-    tpr = np.array(tpr)
-
-    # Obtener los índices ordenados
-    sorted_indices = np.argsort(fpr)
-    
-    # Ordenar fpr y tpr según los índices
-    sorted_fpr = fpr[sorted_indices]
-    sorted_tpr = tpr[sorted_indices]
-    
-    # Calcular el área bajo la curva ROC usando np.trapz
-    auc = np.trapz(sorted_tpr, sorted_fpr)
-
-    return auc
 
 
 
@@ -195,14 +176,10 @@ class KNN:
         return np.array(y_pred)
 
     def _predict(self, x):
-        # Compute distances between x and all examples in the training set
-        distances = [euclidean_distance(x, x_train) for x_train in self.X_train.values]
-        # Sort by distance and return indices of the first k neinfo_gainhbors
+        distances = [euclidean_distance(x, x_train) for x_train in self.X_train.values] # distances between x and all samples in training set
         k_idx = np.argsort(distances)[: self.k]
-        # Extract the labels of the k nearest neinfo_gainhbor training samples
         k_neinfo_gainhbor_labels = [self.y_train[i] for i in k_idx]
-        # return the most common class label
-        most_common = Counter(k_neinfo_gainhbor_labels).most_common(1)
+        most_common = Counter(k_neinfo_gainhbor_labels).most_common(1)  # most common class in the k nearest neighbors
         return most_common[0][0]
     
 
@@ -222,7 +199,6 @@ class DecisionTree:
         return np.array([self._traverse_DT(x, self.root) for x in X])
 
     # Aux functions
-
     def _grow_DT(self, X, y, depth=0):
         n_samples, n_features = X.shape
         n_labels = len(np.unique(y))
@@ -310,7 +286,7 @@ class RandomForest:
 
     def fit(self, X, y):
         self.trees = []
-        for _ in tqdm(range(self.n_trees)):
+        for _ in range(self.n_trees):
             tree = DecisionTree(
                 max_depth=self.max_depth,
                 min_samples_split=self.min_samples_split,
@@ -322,7 +298,7 @@ class RandomForest:
     
     def predict(self, X):
         tree_preds = np.array([tree.predict(X) for tree in self.trees])
-        y_pred = np.mean(tree_preds, axis=0)  # Calculate average prediction from all trees
+        y_pred = np.mean(tree_preds, axis=0)  # average prediction from all trees
         y_pred = np.round(y_pred).astype(int)
         return y_pred
     

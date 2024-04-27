@@ -82,23 +82,15 @@ def f1(y_true, y_pred):
     r = recall(y_true, y_pred)
     return 2 * p * r / (p + r)
 
-# def roc(y_true, y_pred):
-#     TP, TN, FP, FN = confusion_matrix(y_true, y_pred)
-#     TPR = TP / (TP + FN)
-#     FPR = FP / (FP + TN)
-#     return TPR, FPR
-
 def roc_curve(y_true, model, X_validation, plot=False, model_name=None, thresh_iters=100, thresh_range=(0, 1)):
     thresholds = np.linspace(thresh_range[0], thresh_range[1], num=thresh_iters)
-    print(thresh_range[0], thresh_range[1])
+    # print(thresh_range[0], thresh_range[1])
     
     tpr = []
     fpr = []
     for threshold in thresholds:
         model.threshold = threshold
-        if 'logistic regression' in model_name.lower():
-            model.fit(X_validation, y_true)
-        elif 'lda' in model_name.lower():
+        if 'lda' in model_name.lower():
             model.fit(X_validation, y_true)
             model.transform(X_validation)
         y_pred = model.predict(X_validation)
@@ -197,6 +189,7 @@ class LDA:
         return y_pred
     
 class KNN:
+    # Threshold applies only for binary classification
     def __init__(self, k=3, threshold=0.5):
         self.k = k
         self.threshold = threshold
@@ -210,22 +203,15 @@ class KNN:
         return np.array(y_pred)
 
     def _predict(self, x):
-        # Compute distances between x and all examples in the training set
+        # Implemented for multiclass classification
         distances = [euclidean_distance(x, x_train) for x_train in self.X_train.values]
-        # Sort by distance and return indices of the first k neighbors
         k_idx = np.argsort(distances)[: self.k]
-        # Extract the labels of the k nearest neighbor training samples
         k_neighbor_labels = [self.y_train[i] for i in k_idx]
-        # Count occurrences of each class label
         class_counts = Counter(k_neighbor_labels)
-        # Calculate the fraction of the dominant class
         dominant_class = class_counts.most_common(1)[0][1] / self.k
-        # Check if the dominant fraction exceeds the threshold
         if dominant_class >= self.threshold:
-            # Return the most common class label
             return class_counts.most_common(1)[0][0]
         else:
-            # Return a default label or None if the threshold is not met
             return 0
     
 
