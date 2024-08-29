@@ -1,5 +1,6 @@
 # ML Classification Models from Scratch
 This repository contains the solutions to the third practical assignment for the course "I302 - Machine Learning and Deep Learning" for the first semester of 2024.
+Three problems were considered and solved in different folders, where a python file contains the classes and functions used and the jupyter notebook file shows the main code and results.
 
 ## Table of Contents
 
