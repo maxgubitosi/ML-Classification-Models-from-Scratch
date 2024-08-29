@@ -8,13 +8,10 @@ This repository contains the solutions to the third practical assignment for the
   - [1. Breast Cancer Diagnosis](#1-breast-cancer-diagnosis)
   - [2. Credit Card Fraud Detection](#2-credit-card-fraud-detection)
   - [3. Vehicle Acceptance Evaluation](#3-vehicle-acceptance-evaluation)
-- [How to Run the Code](#how-to-run-the-code)
 - [Results](#results)
   - [Breast Cancer Diagnosis](#breast-cancer-diagnosis-results)
   - [Credit Card Fraud Detection](#credit-card-fraud-detection-results)
   - [Vehicle Acceptance Evaluation](#vehicle-acceptance-evaluation-results)
-- [Conclusion](#conclusion)
-- [Acknowledgements](#acknowledgements)
 
 ## Introduction
 
