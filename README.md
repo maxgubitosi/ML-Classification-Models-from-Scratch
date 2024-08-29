@@ -77,21 +77,14 @@ For each model, the following performance metrics are evaluated (SMOTE was consi
 - Precision for Class 0 ("unacceptable") and Class 3 ("very good")
 
 ## Results
+One result for each problem is shown here.
 
 ### Breast Cancer Diagnosis Results
+![Breast Cancer ROC Curve](1.png)
 
-**(Include visual results and analysis here, such as ROC curves, confusion matrices, etc.)**
-
-![Breast Cancer ROC Curve](path/to/your/image.png)
 
 ### Credit Card Fraud Detection Results
-
-**(Include visual results and analysis here, such as performance metrics before and after applying rebalancing techniques.)**
-
-![Credit Card PRC Curve](path/to/your/image.png)
+![Credit Card PRC Curve](2.png)
 
 ### Vehicle Acceptance Evaluation Results
-
-**(Include visual results and analysis here, showing model comparison and performance.)**
-
-![Vehicle Acceptance Model Comparison](path/to/your/image.png)
+![Vehicle Acceptance Model Comparison](3.png)
